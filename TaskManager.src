@@ -1,0 +1,257 @@
+import_code("/root/sh411Lib.src")
+
+// show debug output
+// evaluate assertions
+_DEBUG = false
+
+p = new sh411.Process
+str = new sh411.String
+fp = new sh411.Declarative
+
+local_shell = @sh411.local_shell
+local_computer = @sh411.local_computer
+Namespace = @sh411.Namespace
+
+_ = @str.colour
+
+
+
+
+// constants
+F_CHAR = "*"
+F_COLOUR = "#808080"
+TYPE_HELP_MESSAGE = "Press 'h' or '/' to see all available commands."
+
+all_processes = @p.get_running_processes
+
+existing_processes = function(processes)
+    return fp.filter(@p.exists, processes)
+end function
+
+process_to_str = function(process)
+    name = str.format_phrase(p.name(process), 20, F_CHAR)
+    cpu = str.format_phrase(p.cpu(process), 6, F_CHAR)
+    mem = str.format_phrase(p.mem(process), 6, F_CHAR)
+    user = p.user(process)
+    return [name, cpu, mem, user].join("")
+end function
+
+
+state = new Namespace
+
+state.messages = [TYPE_HELP_MESSAGE, "This software is licensed under GPL v3. Press 'd' for more details."]
+state.selected = []
+state.selecting = 0
+
+state.clear = function()
+    state.messages = []
+    state.selected = []
+    state.selecting = -1
+end function
+
+state.message = function(message)
+    state.messages = state.messages + [message]
+end function
+
+state.show_messages = function()
+    _DEBUG_LOG "state.messages: " + state.messages
+    _ASSERT state.messages isa list, "state.messages is not a list"
+    if state.messages.len != 0 then
+        fp.mapm @print, state.messages
+        state.messages = []
+    end if
+end function
+
+
+ui = new Namespace
+
+ui.show_header = function()
+    print "Hacktoria's Task Manager"
+end function
+
+ui.show_process = function(process)
+    process_str = process_to_str(process)
+    if state.selecting == fp.elem_index(process, all_processes) then process_str = str.underline(process_str)
+    if fp.find(process, state.selected) != null then process_str = str.bold(process_str)
+    print process_str.replace(F_CHAR, _(F_CHAR, F_COLOUR))
+end function
+
+ui.show_processes = function(processes)
+    print ["TASK NAME", " " * 12, "CPU", " " * 4, "MEM", " " * 4, "USER"].join("")
+    fp.mapm @ui.show_process, processes
+    cpu = str.format_phrase(p.cpu_usage(processes), 6)
+    mem = str.format_phrase(p.mem_usage(processes), 6)
+    total = processes.len
+    print ["CPU: ", cpu, "MEM: ", mem, "TOTAL: ", total].join("")
+end function
+
+ui.show_all_processes = function()
+    return ui.show_processes(all_processes)
+end function
+
+
+help = new Namespace
+
+help.main = "----------------------------------------
+m       - Htop mode
+g       - Guard mode
+t       - Terminate
+s       - Snapshot
+a       - De/Select all
+<Any>   - Refresh tasks
+d       - Licensing details
+q       - Quit Program"
+
+
+menu = new Namespace
+
+menu.guard_mode = function(safe_processes)
+    guard_mode = function(safe_processes)
+        running_processes = all_processes
+        if safe_processes != running_processes then
+            terminate_log = function(process)
+                print "Terminated Process '" + p.name(process) + "' with status: " + p.terminate(process)
+            end function
+
+            p_ = function(x); return _find(x, safe_processes) == null; end function
+            unsafe_processes = fp.filter(@p_, running_processes)
+            fp.mapm @terminate_log, unsafe_processes
+        end if
+        return guard_mode(safe_processes)
+    end function
+
+    clear_screen
+    ui.show_header
+    print "Guard mode is running. Waiting for processes to appear..."
+
+    return guard_mode(safe_processes)
+end function
+
+menu.htop_mode = function()
+    state.clear
+
+    clear_screen
+    ui.show_header
+    ui.show_all_processes
+    
+    state.show_messages
+
+    wait 1/2; yield
+    return menu.htop_mode
+end function
+
+
+
+
+main = function()
+    clear_screen
+    ui.show_header
+    ui.show_all_processes
+    
+    if state.messages.len == 0 then print TYPE_HELP_MESSAGE
+    state.show_messages
+
+    _DEBUG_LOG "state.selecting: " + state.selecting
+    _DEBUG_LOG "state.selected: " + state.selected
+
+    input = user_input(char(0), false, true).trim().lower
+
+    _ASSERT state.selected isa list, "state.selected is not a list"
+    _ASSERT state.selecting isa number, "state.selecting is not a number"
+
+    // quit program
+    if input == "q" then
+        exit("Thanks for using this program. See you soon!")
+    
+    // htop mode
+    else if input == "m" then
+        menu.htop_mode
+    
+    // guard mode
+    else if input == "g" then
+        safe_processes = existing_processes(state.selected)
+        if safe_processes.len == 0 then
+            state.message "ERROR: Select task/s first!"
+        else
+            return menu.guard_mode(safe_processes)
+        end if
+
+    // choose all processes
+    else if input == "a" then
+        if state.selected == all_processes then
+            state.selected = []
+        else
+            state.selected = all_processes
+        end if
+
+    // show help message
+    else if input == "h" or input == "/" then
+        state.message help.main
+    
+    // show disclaimer message
+    else if input == "d" then
+        state.message "\nThis program comes with ABSOLUTELY NO WARRANTY; This is free software, and you are welcome to redistribute it under certain conditions; For more details please visit https://github.com/h4cktoria/task-manager"
+
+    // terminate processes
+    else if input == "t" then
+        if existing_processes(state.selected).len == 0 then
+            state.message "ERROR: Select task/s first!"
+        else
+            p_ = function(x); return x isa string; end function
+            state.messages = state.messages + fp.filter(@p_, fp.fmap(@p.terminate, existing_processes(state.selected)))
+            state.selected = []
+            state.selecting = 0
+        end if
+
+    // snapshot taking
+    else if input == "s" then
+        if existing_processes(state.selected).len == 0 then
+            state.message "ERROR: Select task/s first!"
+        else
+            if not local_computer.File(current_path) then
+                state.message "Could not find current_path..."
+            else
+                snapshot_name = str.random(8) + ".shot"
+                result = local_computer.touch(current_path, snapshot_name)
+                if result isa string then
+                    state.message "Could not create snapshot file..."
+                else
+                    snapshot_file = local_computer.File(current_path + "/" + snapshot_name)
+                    snapshot_content = ["NAME", "PID", "CPU", "MEM", "USER"].join(" ")
+                    f = function(process); outer.snapshot_content = snapshot_content + char(10) + process.join(" "); end function
+                    fp.mapm @f, existing_processes(state.selected)
+                    snapshot_file.set_content format_columns(snapshot_content)
+                    state.message "Snapshot '" + snapshot_name + "' saved successfuly at '" + current_path + "'"
+                end if
+            end if
+        end if
+    
+    // controls implementation
+    else if input == "uparrow" then
+        if state.selecting <= 0 then
+            state.selecting = all_processes.len - 1
+        else
+            state.selecting = state.selecting - 1
+        end if
+    else if input == "downarrow" then
+        if state.selecting >= all_processes.len - 1 then
+            state.selecting = 0
+        else
+            state.selecting = state.selecting + 1
+        end if
+    else if input == "rightarrow" then
+        if not state.selecting + 1 > all_processes.len then
+            selected_process = all_processes[state.selecting]
+            if fp.find(selected_process, state.selected) != null then
+                state.selected.remove(fp.elem_index(selected_process, state.selected))
+            else
+                state.selected = state.selected + [selected_process]
+            end if
+        else
+            state.selecting = all_processes.len - 1
+        end if
+    end if
+
+    return main
+end function
+main

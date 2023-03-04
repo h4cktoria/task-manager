@@ -1,0 +1,579 @@
+////////////////////////////////////////
+// <Section name>.
+////////////////////////////////////////
+// imported functions are named with _
+// internal functions are named with __
+
+
+
+
+////////////////////////////////////////
+// Global scope variables and functions.
+////////////////////////////////////////
+
+_DEBUG = false
+
+_DEBUG_LOG = function(debug_message)
+    if _DEBUG == false then return
+    print("<b>DEBUG:</b> " + debug_message)
+end function
+
+_ERROR = function(prefix, error_message)
+    if not error_message then
+        error_message = "<b>" + prefix.upper + "!</b>"
+    else
+        error_message = "<b>" + prefix.upper + ":</b> " + error_message
+    end if
+    exit error_message
+end function
+
+_ASSERT = function(expression, failure_message)
+    if _DEBUG == false then return
+    if expression != true then _ERROR("assertion error", failure_message)
+end function
+
+_NOT_IMPLEMENTED = function(message)
+    _ERROR "not implemented error", message
+end function
+
+
+////////////////////////////////////////
+// Auxiliary functions and variables.
+////////////////////////////////////////
+
+_local_shell = get_shell()
+_local_computer = _local_shell.host_computer()
+
+_Namespace = function()
+    return {}
+end function
+
+_list_copy = function(l)
+    new_l = []
+    for i in l
+        new_l.push(i)
+    end for
+    return new_l
+end function
+
+_to_number = function(str)
+    return str.val()
+end function
+
+
+////////////////////////////////////////
+// Functional programming toolkit.
+////////////////////////////////////////
+
+_head = function(xs)
+    if xs.len() == 0 then return
+    return xs[0]
+end function
+
+_tail = function(xs)
+    if xs.len() == 0 then return []
+    return xs[1:]
+end function
+
+_last = function(xs)
+    if xs.len() == 0 then return
+    return xs[-1]
+end function
+
+_init = function(xs)
+    if xs.len() == 0 then return []
+    return xs[:-1]
+end function
+
+_foldl = function(f, z, xs)
+    if xs.len() == 0 then return z
+    return _foldl(@f, f(z, _head(xs)), _tail(xs))
+end function
+
+_fmap = function(f, xs)
+    aux = function(acc, x); return acc + [f(x)]; end function
+    return _foldl(@aux, [], xs)
+end function
+
+_mapm = function(f, xs)
+    aux = function(acc, x); f(x); end function
+    return _foldl(@aux, null, xs)
+end function
+
+_find = function(n, xs)
+    if xs.len() == 0 then return
+    if n == _head(xs) then return n
+    return _find(n, _tail(xs))
+end function
+
+_elem_index = function(n, xs)
+    if xs.len() == 0 then return
+    if n == _head(xs) then return 0
+    return _elem_index(n, _tail(xs)) + 1
+end function
+
+_filter = function(p, xs)
+    aux = function(acc, x); if p(x) == true then return acc + [x] else return acc; end function
+    return _foldl(@aux, [], xs)
+end function
+
+_sum = function(xs)
+    aux = function(acc, x); return acc + x; end function
+    return _foldl(@aux, 0, xs)
+end function
+
+_concat = function(xs)
+    aux = function(acc, x); if x isa list then return acc + x else return acc + [x]; end function
+    return _foldl(@aux, [], xs)
+end function
+
+_sorted = function(xs)
+    ys = _list_copy(xs)
+    ys.sort()
+    return ys
+end function
+
+
+////////////////////////////////////////
+// Process Manipulation.
+////////////////////////////////////////
+
+_get_running_processes = function()
+    aux = function(line)
+        line = line.split(" ")
+        user = line[0]
+        pid = line[1].val()
+        mem = line[2].remove("%").val()
+        cpu = line[3].remove("%").val()
+        name = line[4]
+        return [user, pid, mem, cpu, name]
+    end function
+
+    return _fmap(@aux, _tail(_local_computer.show_procs().split(char(10))))
+end function
+
+_get_process_user = function(process)
+    return process[0]
+end function
+
+_get_process_pid = function(process)
+    return process[1]
+end function
+
+_get_process_cpu = function(process)
+    return process[2]
+end function
+
+_get_process_mem = function(process)
+    return process[3]
+end function
+
+_get_process_name = function(process)
+    return process[4]
+end function
+
+_terminate = function(process)
+    return _local_computer.close_program(_get_process_pid(process))
+end function
+
+_cpu_usage = function(processes)
+    return _sum(_fmap(@_get_process_cpu, processes))
+end function
+
+_mem_usage = function(processes)
+    return _sum(_fmap(@_get_process_mem, processes))
+end function
+
+_exists = function(process)
+    processes = _get_running_processes()
+    return not (_find(process, processes) == null)
+end function
+
+
+////////////////////////////////////////
+// Implicit(Low-Level) control flow.
+////////////////////////////////////////
+
+// "allocates" memory and returns a pointer to it.
+_malloc = function(object)
+    dereference = function(value)
+        if not value then return self._value[0]
+        self._value[0] = value
+    end function
+
+    return {"_value": [object], "deref": @dereference}
+end function
+
+
+////////////////////////////////////////
+// String functions.
+////////////////////////////////////////
+
+_qwerty_lower = "qwertyuiopasdfghjklzxcvbnm"
+_qwerty_upper = _qwerty_lower.upper()
+_qwerty_abc = _qwerty_lower + _qwerty_upper
+
+_string_random = function(l)
+    abc = _list_copy(_qwerty_abc)
+	str = ""
+	i = 0
+	while i < l
+		abc.shuffle()
+		str = str + _head(abc)
+		i = i + 1
+	end while
+	return str
+end function
+
+_format_phrase = function(phrase, count, character)
+	if not character then character = " "
+	if not count then count = phrase.len()
+	// phrase to string convertion
+	phrase = phrase + ""
+	if phrase.len() < count then
+		while phrase.len() < count
+			phrase = phrase + character
+		end while
+	else if phrase.len() > count then
+		while phrase.len() > count
+			phrase = phrase.values()
+			phrase[-1] = ""
+			new_phrase = ""
+			for char_ in phrase
+				new_phrase = new_phrase + char_
+			end for
+			phrase = new_phrase
+		end while
+	end if
+	return phrase + character
+end function
+
+_colour = function(text, color)
+    return ["<color=", color, ">", text, "</color>"].join("")
+end function
+
+_bold = function(text)
+    return ["<b>", text, "</b>"].join("")
+end function
+
+_underline = function(text)
+    return ["<u>", text, "</u>"].join("")
+end function
+
+_italic = function(text)
+    return ["<i>", text, "</i>"].join("")
+end function
+
+
+////////////////////////////////////////
+// Exposing library functions into sh411 namespace.
+////////////////////////////////////////
+
+sh411 = {}
+
+sh411.local_shell = @_local_shell
+sh411.local_computer = @_local_computer
+sh411.Namespace = @_Namespace
+sh411.list_copy = @_list_copy
+sh411.to_number = @_to_number
+
+sh411.Declarative = {}
+sh411.Declarative.head = @_head
+sh411.Declarative.tail = @_tail
+sh411.Declarative.last = @_last
+sh411.Declarative.init = @_init
+sh411.Declarative.foldl = @_foldl
+sh411.Declarative.fmap = @_fmap
+sh411.Declarative.mapm = @_mapm
+sh411.Declarative.filter = @_filter
+sh411.Declarative.sum = @_sum
+sh411.Declarative.concat = @_concat
+sh411.Declarative.find = @_find
+sh411.Declarative.elem_index = @_elem_index
+sh411.Declarative.sorted = @_sorted
+
+sh411.Process = {}
+sh411.Process.get_running_processes = @_get_running_processes
+sh411.Process.user = @_get_process_user
+sh411.Process.pid = @_get_process_pid
+sh411.Process.cpu = @_get_process_cpu
+sh411.Process.mem = @_get_process_mem
+sh411.Process.name = @_get_process_name
+sh411.Process.cpu_usage = @_cpu_usage
+sh411.Process.mem_usage = @_mem_usage
+sh411.Process.terminate = @_terminate
+sh411.Process.exists = @_exists
+
+sh411.Implicit = {}
+sh411.Implicit.malloc = @_malloc
+
+sh411.String = {}
+sh411.String.qwerty_lower = @_qwerty_lower
+sh411.String.qwerty_upper = @_qwerty_upper
+sh411.String.qwerty_abc = @_qwerty_abc
+sh411.String.random = @_string_random
+sh411.String.format_phrase = @_format_phrase
+sh411.String.colour = @_colour
+sh411.String.bold = @_bold
+sh411.String.underline = @_underline
+sh411.String.italic = @_italic
+
+
+
+
+// show debug output
+// evaluate assertions
+_DEBUG = false
+
+p = new sh411.Process
+str = new sh411.String
+fp = new sh411.Declarative
+
+local_shell = @sh411.local_shell
+local_computer = @sh411.local_computer
+Namespace = @sh411.Namespace
+
+_ = @str.colour
+
+
+
+
+// constants
+F_CHAR = "*"
+F_COLOUR = "#808080"
+TYPE_HELP_MESSAGE = "Press 'h' or '/' to see all available commands."
+
+all_processes = @p.get_running_processes
+
+existing_processes = function(processes)
+    return fp.filter(@p.exists, processes)
+end function
+
+process_to_str = function(process)
+    name = str.format_phrase(p.name(process), 20, F_CHAR)
+    cpu = str.format_phrase(p.cpu(process), 6, F_CHAR)
+    mem = str.format_phrase(p.mem(process), 6, F_CHAR)
+    user = p.user(process)
+    return [name, cpu, mem, user].join("")
+end function
+
+
+state = new Namespace
+
+state.messages = [TYPE_HELP_MESSAGE, "This software is licensed under GPL v3. Press 'd' for more details."]
+state.selected = []
+state.selecting = 0
+
+state.clear = function()
+    state.messages = []
+    state.selected = []
+    state.selecting = -1
+end function
+
+state.message = function(message)
+    state.messages = state.messages + [message]
+end function
+
+state.show_messages = function()
+    _DEBUG_LOG "state.messages: " + state.messages
+    _ASSERT state.messages isa list, "state.messages is not a list"
+    if state.messages.len != 0 then
+        fp.mapm @print, state.messages
+        state.messages = []
+    end if
+end function
+
+
+ui = new Namespace
+
+ui.show_header = function()
+    print "Hacktoria's Task Manager"
+end function
+
+ui.show_process = function(process)
+    process_str = process_to_str(process)
+    if state.selecting == fp.elem_index(process, all_processes) then process_str = str.underline(process_str)
+    if fp.find(process, state.selected) != null then process_str = str.bold(process_str)
+    print process_str.replace(F_CHAR, _(F_CHAR, F_COLOUR))
+end function
+
+ui.show_processes = function(processes)
+    print ["TASK NAME", " " * 12, "CPU", " " * 4, "MEM", " " * 4, "USER"].join("")
+    fp.mapm @ui.show_process, processes
+    cpu = str.format_phrase(p.cpu_usage(processes), 6)
+    mem = str.format_phrase(p.mem_usage(processes), 6)
+    total = processes.len
+    print ["CPU: ", cpu, "MEM: ", mem, "TOTAL: ", total].join("")
+end function
+
+ui.show_all_processes = function()
+    return ui.show_processes(all_processes)
+end function
+
+
+help = new Namespace
+
+help.main = "----------------------------------------
+m       - Htop mode
+g       - Guard mode
+t       - Terminate
+s       - Snapshot
+a       - De/Select all
+<Any>   - Refresh tasks
+d       - Licensing details
+q       - Quit Program"
+
+
+menu = new Namespace
+
+menu.guard_mode = function(safe_processes)
+    guard_mode = function(safe_processes)
+        running_processes = all_processes
+        if safe_processes != running_processes then
+            terminate_log = function(process)
+                print "Terminated Process '" + p.name(process) + "' with status: " + p.terminate(process)
+            end function
+
+            p_ = function(x); return _find(x, safe_processes) == null; end function
+            unsafe_processes = fp.filter(@p_, running_processes)
+            fp.mapm @terminate_log, unsafe_processes
+        end if
+        return guard_mode(safe_processes)
+    end function
+
+    clear_screen
+    ui.show_header
+    print "Guard mode is running. Waiting for processes to appear..."
+
+    return guard_mode(safe_processes)
+end function
+
+menu.htop_mode = function()
+    state.clear
+
+    clear_screen
+    ui.show_header
+    ui.show_all_processes
+    
+    state.show_messages
+
+    wait 1/2; yield
+    return menu.htop_mode
+end function
+
+
+
+
+main = function()
+    clear_screen
+    ui.show_header
+    ui.show_all_processes
+    
+    if state.messages.len == 0 then print TYPE_HELP_MESSAGE
+    state.show_messages
+
+    _DEBUG_LOG "state.selecting: " + state.selecting
+    _DEBUG_LOG "state.selected: " + state.selected
+
+    input = user_input(char(0), false, true).trim().lower
+
+    _ASSERT state.selected isa list, "state.selected is not a list"
+    _ASSERT state.selecting isa number, "state.selecting is not a number"
+
+    // quit program
+    if input == "q" then
+        exit("Thanks for using this program. See you soon!")
+    
+    // htop mode
+    else if input == "m" then
+        menu.htop_mode
+    
+    // guard mode
+    else if input == "g" then
+        safe_processes = existing_processes(state.selected)
+        if safe_processes.len == 0 then
+            state.message "ERROR: Select task/s first!"
+        else
+            return menu.guard_mode(safe_processes)
+        end if
+
+    // choose all processes
+    else if input == "a" then
+        if state.selected == all_processes then
+            state.selected = []
+        else
+            state.selected = all_processes
+        end if
+
+    // show help message
+    else if input == "h" or input == "/" then
+        state.message help.main
+    
+    // show disclaimer message
+    else if input == "d" then
+        state.message "\nThis program comes with ABSOLUTELY NO WARRANTY; This is free software, and you are welcome to redistribute it under certain conditions; For more details please visit https://github.com/h4cktoria/task-manager"
+
+    // terminate processes
+    else if input == "t" then
+        if existing_processes(state.selected).len == 0 then
+            state.message "ERROR: Select task/s first!"
+        else
+            p_ = function(x); return x isa string; end function
+            state.messages = state.messages + fp.filter(@p_, fp.fmap(@p.terminate, existing_processes(state.selected)))
+            state.selected = []
+            state.selecting = 0
+        end if
+
+    // snapshot taking
+    else if input == "s" then
+        if existing_processes(state.selected).len == 0 then
+            state.message "ERROR: Select task/s first!"
+        else
+            if not local_computer.File(current_path) then
+                state.message "Could not find current_path..."
+            else
+                snapshot_name = str.random(8) + ".shot"
+                result = local_computer.touch(current_path, snapshot_name)
+                if result isa string then
+                    state.message "Could not create snapshot file..."
+                else
+                    snapshot_file = local_computer.File(current_path + "/" + snapshot_name)
+                    snapshot_content = ["NAME", "PID", "CPU", "MEM", "USER"].join(" ")
+                    f = function(process); outer.snapshot_content = snapshot_content + char(10) + process.join(" "); end function
+                    fp.mapm @f, existing_processes(state.selected)
+                    snapshot_file.set_content format_columns(snapshot_content)
+                    state.message "Snapshot '" + snapshot_name + "' saved successfuly at '" + current_path + "'"
+                end if
+            end if
+        end if
+    
+    // controls implementation
+    else if input == "uparrow" then
+        if state.selecting <= 0 then
+            state.selecting = all_processes.len - 1
+        else
+            state.selecting = state.selecting - 1
+        end if
+    else if input == "downarrow" then
+        if state.selecting >= all_processes.len - 1 then
+            state.selecting = 0
+        else
+            state.selecting = state.selecting + 1
+        end if
+    else if input == "rightarrow" then
+        if not state.selecting + 1 > all_processes.len then
+            selected_process = all_processes[state.selecting]
+            if fp.find(selected_process, state.selected) != null then
+                state.selected.remove(fp.elem_index(selected_process, state.selected))
+            else
+                state.selected = state.selected + [selected_process]
+            end if
+        else
+            state.selecting = all_processes.len - 1
+        end if
+    end if
+
+    return main
+end function
+main
+
