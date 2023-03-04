@@ -36,8 +36,8 @@ Easy way:
 
 
 Hard way:
-- Download __sh411Lib.src__ and __ProcessMonitor.src__
-- Change the _import_code()_ path in __ProcessMonitor.src__ to the path where __sh411Lib.src__ is located
+- Download __sh411Lib.src__ and __TaskManager.src__
+- Change the _import_code()_ path in __TaskManager.src__ to the path where __sh411Lib.src__ is located
 - Compile __ProcessMonitor.src__
 - Launch compiled binary. Press 'h' to see all available commands
 
