@@ -11,29 +11,35 @@
 // Global scope variables and functions.
 ////////////////////////////////////////
 
+// change that if you re debugging the library
+// _DEBUG = true
 _DEBUG = false
 
-_DEBUG_LOG = function(debug_message)
+_DEBUG_LOG = function(debugMessage)
     if _DEBUG == false then return
-    print("<b>DEBUG:</b> " + debug_message)
+    print("<b>DEBUG:</b> " + debugMessage)
 end function
 
-_ERROR = function(prefix, error_message)
-    if not error_message then
-        error_message = "<b>" + prefix.upper + "!</b>"
+_ERROR = function(prefix, errorMessage)
+    if not errorMessage then
+        errorMessage = _colour("<b>" + prefix.upper + "!</b>", "red")
     else
-        error_message = "<b>" + prefix.upper + ":</b> " + error_message
+        errorMessage = _colour("<b>" + prefix.upper + ":</b> " + errorMessage, "red")
     end if
-    exit error_message
+    exit errorMessage
 end function
 
-_ASSERT = function(expression, failure_message)
+_ASSERT = function(expression, failureMessage)
     if _DEBUG == false then return
-    if expression != true then _ERROR("assertion error", failure_message)
+    if expression != true then _ERROR("assertion error", failureMessage)
 end function
 
-_NOT_IMPLEMENTED = function(message)
+_NOT_IMPLEMENTED_ERROR = function(message)
     _ERROR "not implemented error", message
+end function
+
+_VIRTUAL_METHOD_ERROR = function(methodName)
+    _ERROR "virtual method error", "You need to implement '" + methodName + "'!"
 end function
 
 
@@ -41,22 +47,20 @@ end function
 // Auxiliary functions and variables.
 ////////////////////////////////////////
 
-_local_shell = get_shell()
-_local_computer = _local_shell.host_computer()
+_localShell = get_shell()
+_localComputer = _localShell.host_computer()
 
 _Namespace = function()
     return {}
 end function
 
-_list_copy = function(l)
-    new_l = []
-    for i in l
-        new_l.push(i)
-    end for
-    return new_l
+_listCopy = function(l)
+    _ASSERT l isa list, "_listCopy.l is not a list"
+    return l[0:]
 end function
 
-_to_number = function(str)
+_toNumber = function(str)
+    _ASSERT str isa string, "_toNumber.str is not a string"
     return str.val()
 end function
 
@@ -66,69 +70,86 @@ end function
 ////////////////////////////////////////
 
 _head = function(xs)
+    _ASSERT xs isa list, "_head.xs is not a list"
     if xs.len() == 0 then return
     return xs[0]
 end function
 
 _tail = function(xs)
+    _ASSERT xs isa list, "_tail.xs is not a list"
     if xs.len() == 0 then return []
     return xs[1:]
 end function
 
 _last = function(xs)
+    _ASSERT xs isa list, "_last.xs is not a list"
     if xs.len() == 0 then return
     return xs[-1]
 end function
 
 _init = function(xs)
+    _ASSERT xs isa list, "_init.xs is not a list"
     if xs.len() == 0 then return []
     return xs[:-1]
 end function
 
 _foldl = function(f, z, xs)
+    _ASSERT typeof(@f) == "function", "_foldl.f is not a function"
+    _ASSERT xs isa list, "_foldl.xs is not a list"
     if xs.len() == 0 then return z
     return _foldl(@f, f(z, _head(xs)), _tail(xs))
 end function
 
 _fmap = function(f, xs)
+    _ASSERT typeof(@f) == "function", "_fmap.f is not a function"
+    _ASSERT xs isa list, "_fmap.xs is not a list"
     aux = function(acc, x); return acc + [f(x)]; end function
     return _foldl(@aux, [], xs)
 end function
 
-_mapm = function(f, xs)
+_mapM = function(f, xs)
+    _ASSERT typeof(@f) == "function", "_mapM.f is not a function"
+    _ASSERT xs isa list, "_mapM.xs is not a list"
     aux = function(acc, x); f(x); end function
     return _foldl(@aux, null, xs)
 end function
 
 _find = function(n, xs)
+    _ASSERT xs isa list, "_find.xs is not a list"
     if xs.len() == 0 then return
     if n == _head(xs) then return n
     return _find(n, _tail(xs))
 end function
 
-_elem_index = function(n, xs)
+_elemIndex = function(n, xs)
+    _ASSERT xs isa list, "_elemIndex.xs is not a list"
     if xs.len() == 0 then return
     if n == _head(xs) then return 0
-    return _elem_index(n, _tail(xs)) + 1
+    return _elemIndex(n, _tail(xs)) + 1
 end function
 
 _filter = function(p, xs)
+    _ASSERT typeof(@p) == "function", "_filter.f is not a function"
+    _ASSERT xs isa list, "_filter.xs is not a list"
     aux = function(acc, x); if p(x) == true then return acc + [x] else return acc; end function
     return _foldl(@aux, [], xs)
 end function
 
 _sum = function(xs)
+    _ASSERT xs isa list, "_sum.xs is not a list"
     aux = function(acc, x); return acc + x; end function
     return _foldl(@aux, 0, xs)
 end function
 
 _concat = function(xs)
+    _ASSERT xs isa list, "_concat.xs is not a list"
     aux = function(acc, x); if x isa list then return acc + x else return acc + [x]; end function
     return _foldl(@aux, [], xs)
 end function
 
 _sorted = function(xs)
-    ys = _list_copy(xs)
+    _ASSERT xs isa list, "_sorted.xs is not a list"
+    ys = _listCopy(xs)
     ys.sort()
     return ys
 end function
@@ -138,7 +159,7 @@ end function
 // Process Manipulation.
 ////////////////////////////////////////
 
-_get_running_processes = function()
+_getRunningProcesses = function()
     aux = function(line)
         line = line.split(" ")
         user = line[0]
@@ -149,44 +170,43 @@ _get_running_processes = function()
         return [user, pid, mem, cpu, name]
     end function
 
-    return _fmap(@aux, _tail(_local_computer.show_procs().split(char(10))))
+    return _fmap(@aux, _tail(_localComputer.show_procs().split(char(10))))
 end function
 
-_get_process_user = function(process)
+_getProcessUser = function(process)
     return process[0]
 end function
 
-_get_process_pid = function(process)
+_getProcessPID = function(process)
     return process[1]
 end function
 
-_get_process_cpu = function(process)
+_getProcessCPU = function(process)
     return process[2]
 end function
 
-_get_process_mem = function(process)
+_getProcessMem = function(process)
     return process[3]
 end function
 
-_get_process_name = function(process)
+_getProcessName = function(process)
     return process[4]
 end function
 
 _terminate = function(process)
-    return _local_computer.close_program(_get_process_pid(process))
+    return _localComputer.close_program(_getProcessPID(process))
 end function
 
-_cpu_usage = function(processes)
-    return _sum(_fmap(@_get_process_cpu, processes))
+_cpuUsage = function(processes)
+    return _sum(_fmap(@_getProcessCPU, processes))
 end function
 
-_mem_usage = function(processes)
-    return _sum(_fmap(@_get_process_mem, processes))
+_memUsage = function(processes)
+    return _sum(_fmap(@_getProcessMem, processes))
 end function
 
 _exists = function(process)
-    processes = _get_running_processes()
-    return not (_find(process, processes) == null)
+    return not (_find(process, _getRunningProcesses) == null)
 end function
 
 
@@ -209,12 +229,13 @@ end function
 // String functions.
 ////////////////////////////////////////
 
-_qwerty_lower = "qwertyuiopasdfghjklzxcvbnm"
-_qwerty_upper = _qwerty_lower.upper()
-_qwerty_abc = _qwerty_lower + _qwerty_upper
+_qwertyLower = "qwertyuiopasdfghjklzxcvbnm"
+_qwertyUpper = _qwertyLower.upper()
+_qwertyABC = _qwertyLower + _qwertyUpper
 
-_string_random = function(l)
-    abc = _list_copy(_qwerty_abc)
+_stringRandom = function(l)
+    _ASSERT l isa number, "_stringRandom.l is not a number"
+    abc = _listCopy(_qwertyABC.values)
 	str = ""
 	i = 0
 	while i < l
@@ -225,9 +246,12 @@ _string_random = function(l)
 	return str
 end function
 
-_format_phrase = function(phrase, count, character)
-	if not character then character = " "
-	if not count then count = phrase.len()
+_formatPhrase = function(phrase, count, character)
+    if not count then count = phrase.len()
+    if not character then character = " "
+    _ASSERT phrase isa string, "_formatPhrase.phrase is not a string"
+    _ASSERT count isa number, "_formatPhrase.count is not a number"
+    _ASSERT character isa string or typeof(character) == "null", "_formatPhrase.character is"
 	// phrase to string convertion
 	phrase = phrase + ""
 	if phrase.len() < count then
@@ -249,19 +273,66 @@ _format_phrase = function(phrase, count, character)
 end function
 
 _colour = function(text, color)
+    _ASSERT text isa string, "_colour.text is not a string"
+    _ASSERT color isa string, "_colour.color is not a string"
     return ["<color=", color, ">", text, "</color>"].join("")
 end function
 
 _bold = function(text)
+    _ASSERT text isa string, "_bold.text is not a string"
     return ["<b>", text, "</b>"].join("")
 end function
 
 _underline = function(text)
+    _ASSERT text isa string, "_underline.text is not a string"
     return ["<u>", text, "</u>"].join("")
 end function
 
 _italic = function(text)
+    _ASSERT text isa string, "_italic.text is not a string"
     return ["<i>", text, "</i>"].join("")
+end function
+
+// add 'aa' to the color to make text visible
+_background = function(text, color)
+    _ASSERT text isa string, "_background.text is not a string"
+    _ASSERT color isa string, "_background.color is not a string"
+    return ["<mark=", color, ">", text, "</mark>"].join("")
+end function
+
+_toStr = function(object)
+    return object + ""
+end function
+
+
+////////////////////////////////////////
+// Terminal User Interfaces.
+////////////////////////////////////////
+
+_Tui = new _Namespace
+
+_Tui._messages = []
+
+_Tui.showMessage = function(object)
+    self._messages = self._messages + [object]
+end function
+
+_Tui.setInitMessages = function(messages)
+    _ASSERT messages isa list, "_Tui.setInitMessage.messages is not a list"
+    _mapM @self.showMessage, messages
+end function
+
+_Tui.mainLoop = function()
+    while true
+        if not self.hasIndex("main") then _VIRTUAL_METHOD_ERROR "main"
+        
+        clear_screen
+        
+        _ASSERT _Tui._messages isa list, "_Tui._messages is not a list"
+        _mapM @print, self._messages
+
+        self.main
+    end while
 end function
 
 
@@ -271,11 +342,11 @@ end function
 
 sh411 = {}
 
-sh411.local_shell = @_local_shell
-sh411.local_computer = @_local_computer
+sh411.localShell = @_localShell
+sh411.localComputer = @_localComputer
 sh411.Namespace = @_Namespace
-sh411.list_copy = @_list_copy
-sh411.to_number = @_to_number
+sh411.listCopy = @_listCopy
+sh411.toNumber = @_toNumber
 
 sh411.Declarative = {}
 sh411.Declarative.head = @_head
@@ -284,23 +355,23 @@ sh411.Declarative.last = @_last
 sh411.Declarative.init = @_init
 sh411.Declarative.foldl = @_foldl
 sh411.Declarative.fmap = @_fmap
-sh411.Declarative.mapm = @_mapm
+sh411.Declarative.mapM = @_mapM
 sh411.Declarative.filter = @_filter
 sh411.Declarative.sum = @_sum
 sh411.Declarative.concat = @_concat
 sh411.Declarative.find = @_find
-sh411.Declarative.elem_index = @_elem_index
+sh411.Declarative.elemIndex = @_elemIndex
 sh411.Declarative.sorted = @_sorted
 
 sh411.Process = {}
-sh411.Process.get_running_processes = @_get_running_processes
-sh411.Process.user = @_get_process_user
-sh411.Process.pid = @_get_process_pid
-sh411.Process.cpu = @_get_process_cpu
-sh411.Process.mem = @_get_process_mem
-sh411.Process.name = @_get_process_name
-sh411.Process.cpu_usage = @_cpu_usage
-sh411.Process.mem_usage = @_mem_usage
+sh411.Process.getRunningProcesses = @_getRunningProcesses
+sh411.Process.user = @_getProcessUser
+sh411.Process.pid = @_getProcessPID
+sh411.Process.cpu = @_getProcessCPU
+sh411.Process.mem = @_getProcessMem
+sh411.Process.name = @_getProcessName
+sh411.Process.cpu_usage = @_cpuUsage
+sh411.Process.mem_usage = @_memUsage
 sh411.Process.terminate = @_terminate
 sh411.Process.exists = @_exists
 
@@ -308,15 +379,19 @@ sh411.Implicit = {}
 sh411.Implicit.malloc = @_malloc
 
 sh411.String = {}
-sh411.String.qwerty_lower = @_qwerty_lower
-sh411.String.qwerty_upper = @_qwerty_upper
-sh411.String.qwerty_abc = @_qwerty_abc
-sh411.String.random = @_string_random
-sh411.String.format_phrase = @_format_phrase
+sh411.String.qwertyLower = @_qwertyLower
+sh411.String.qwertyUpper = @_qwertyUpper
+sh411.String.qwertyAbc = @_qwertyABC
+sh411.String.random = @_stringRandom
+sh411.String.formatPhrase = @_formatPhrase
 sh411.String.colour = @_colour
 sh411.String.bold = @_bold
 sh411.String.underline = @_underline
 sh411.String.italic = @_italic
+sh411.String.background = @_background
+sh411.String.toStr = @_toStr
+
+sh411.TUI = @_Tui
 
 
 
@@ -326,5 +401,5 @@ sh411.String.italic = @_italic
 ////////////////////////////////////////
 
 {"test": function()}//.test()
-    // all the test code goes here
+    TUI = new sh411.TUI
 end function
